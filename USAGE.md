@@ -52,6 +52,22 @@ Tracks objects across video frames using point or box prompts.
 - `masks` (MASK): Segmentation masks for each frame
 - `overlay_frames` (IMAGE): Frames with colored mask overlays
 
+### EdgeTAM Selected Person Bridge
+
+Applies the tracked masks to the original frames and produces a clean selected-person stream for downstream image-only nodes.
+
+**Required Inputs:**
+- `tracked_frames` (IMAGE): Original video frames from `EdgeTAM Video Tracker`
+- `masks` (MASK): Segmentation masks from `EdgeTAM Video Tracker`
+
+**Optional Inputs:**
+- `threshold` (FLOAT): Mask threshold used to select the tracked person
+- `invert_mask` (BOOLEAN): Invert the mask before applying it
+
+**Outputs:**
+- `selected_frames` (IMAGE): Frames with the background removed
+- `selected_masks` (MASK): Binary masks used to create the cutout stream
+
 **Click Mode Example:**
 ```
 use_click_mode: True
@@ -229,6 +245,12 @@ LoadVideo → EdgeTAMVideoTracker → VideoProcessor → SaveVideo
 
 ```
 EdgeTAMImageSegmentor → MaskProcessor → ImageComposite
+```
+
+### DWPose Bridge
+
+```
+LoadVideo → EdgeTAMVideoTracker → EdgeTAMSelectedPersonBridge → DWPose
 ```
 
 ### Batch Processing

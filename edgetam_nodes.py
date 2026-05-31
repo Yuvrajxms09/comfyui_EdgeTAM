@@ -5,6 +5,7 @@ Main node implementations for EdgeTAM video tracking and image segmentation.
 
 import numpy as np
 import torch
+import cv2
 from PIL import Image
 
 # Import EdgeTAM components
@@ -54,6 +55,44 @@ def get_image_predictor():
             print(f"Error initializing EdgeTAM Image Predictor: {e}")
             return None
     return IMAGE_PREDICTOR
+
+
+def _normalize_mask_batch(mask_tensor: torch.Tensor, batch_size: int, height: int, width: int) -> torch.Tensor:
+    """
+    Normalize a ComfyUI MASK tensor to shape (B, H, W) as float32.
+    Supports common ComfyUI layouts such as (B, H, W, 1), (B, 1, H, W), or (H, W).
+    """
+    if mask_tensor.dim() == 2:
+        mask_tensor = mask_tensor.unsqueeze(0)
+
+    if mask_tensor.dim() == 4 and mask_tensor.shape[-1] == 1:
+        mask_tensor = mask_tensor.squeeze(-1)
+    elif mask_tensor.dim() == 4 and mask_tensor.shape[1] == 1:
+        mask_tensor = mask_tensor.squeeze(1)
+
+    if mask_tensor.dim() != 3:
+        raise ValueError(f"Unsupported mask tensor shape: {tuple(mask_tensor.shape)}")
+
+    mask_tensor = mask_tensor.float()
+
+    if mask_tensor.shape[1] != height or mask_tensor.shape[2] != width:
+        resized = []
+        for i in range(mask_tensor.shape[0]):
+            mask_np = mask_tensor[i].cpu().numpy()
+            mask_np = cv2.resize(mask_np, (width, height), interpolation=cv2.INTER_NEAREST)
+            resized.append(torch.from_numpy(mask_np))
+        mask_tensor = torch.stack(resized, dim=0).float()
+
+    if mask_tensor.shape[0] == batch_size:
+        return mask_tensor
+    if mask_tensor.shape[0] == 1 and batch_size > 1:
+        return mask_tensor.repeat(batch_size, 1, 1)
+    if batch_size == 1 and mask_tensor.shape[0] > 1:
+        return mask_tensor[:1]
+
+    raise ValueError(
+        f"Mask batch size {mask_tensor.shape[0]} does not match frame batch size {batch_size}."
+    )
 
 class EdgeTAMVideoTracker:
     """
@@ -343,6 +382,63 @@ class EdgeTAMVideoTracker:
                 os.unlink(temp_video_path)
             except:
                 pass
+
+
+class EdgeTAMSelectedPersonBridge:
+    """
+    Applies EdgeTAM masks to tracked frames and produces a clean selected-person stream.
+
+    This is the bridge for image-only downstream nodes like DWPose.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "tracked_frames": ("IMAGE",),
+                "masks": ("MASK",),
+            },
+            "optional": {
+                "threshold": ("FLOAT", {
+                    "default": 0.5,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01,
+                    "tooltip": "Mask threshold used to select the tracked person"
+                }),
+                "invert_mask": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Invert the mask before applying it"
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("selected_frames", "selected_masks")
+    FUNCTION = "apply_selected_person"
+    CATEGORY = "EdgeTAM"
+
+    def apply_selected_person(self, tracked_frames, masks, threshold=0.5, invert_mask=False):
+        if tracked_frames.dim() == 3:
+            tracked_frames = tracked_frames.unsqueeze(0)
+
+        if tracked_frames.dim() != 4:
+            raise ValueError(
+                f"Expected tracked_frames to have shape (B, H, W, C), got {tuple(tracked_frames.shape)}"
+            )
+
+        batch_size, height, width, channels = tracked_frames.shape
+        if channels != 3:
+            raise ValueError(f"Expected tracked_frames to have 3 channels, got {channels}")
+
+        mask_batch = _normalize_mask_batch(masks, batch_size, height, width)
+        binary_mask = (mask_batch > float(threshold)).float()
+        if invert_mask:
+            binary_mask = 1.0 - binary_mask
+
+        selected_frames = tracked_frames * binary_mask.unsqueeze(-1)
+        selected_masks = binary_mask.unsqueeze(-1)
+        return (selected_frames, selected_masks)
     
 
 
@@ -443,10 +539,12 @@ class InteractiveMaskEditor:
 # Node mappings for ComfyUI
 NODE_CLASS_MAPPINGS = {
     "EdgeTAMVideoTracker": EdgeTAMVideoTracker,
+    "EdgeTAMSelectedPersonBridge": EdgeTAMSelectedPersonBridge,
     "InteractiveMaskEditor": InteractiveMaskEditor,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "EdgeTAMVideoTracker": "EdgeTAM Video Tracker",
+    "EdgeTAMSelectedPersonBridge": "EdgeTAM Selected Person Bridge",
     "InteractiveMaskEditor": "Interactive Mask Editor",
 }
