@@ -15,7 +15,7 @@ python install_edgetam.py
 # Option 2: Manual installation
 git clone https://github.com/facebookresearch/EdgeTAM.git
 cd EdgeTAM
-pip install -e .
+python -m pip install --break-system-packages -e .
 ```
 
 ### 2. Test Installation
@@ -150,9 +150,9 @@ For tracking multiple objects, use multiple tracker nodes:
 ### Image Segmentation Pipeline
 
 1. **Load Image**: Use `LoadImage` node
-2. **Segment**: Connect to `EdgeTAMImageSegmentor`
-3. **Refine**: Use multiple points for better segmentation
-4. **Post-process**: Apply mask operations as needed
+2. **Annotate**: Connect to `InteractiveMaskEditor`
+3. **Track**: Feed the same image batch into `EdgeTAMVideoTracker`
+4. **Bridge**: Use `EdgeTAMSelectedPersonBridge` to produce clean cutout frames
 
 ## Tips and Best Practices
 
@@ -174,7 +174,7 @@ For tracking multiple objects, use multiple tracker nodes:
 #### Model Download Fails
 ```bash
 # Manual download
-wget https://github.com/facebookresearch/EdgeTAM/releases/download/v1.0/edgetam.pt
+wget https://huggingface.co/spaces/facebook/EdgeTAM/resolve/main/checkpoints/edgetam.pt
 # Place in: models/edgetam.pt
 ```
 
@@ -244,7 +244,7 @@ LoadVideo → EdgeTAMVideoTracker → VideoProcessor → SaveVideo
 ### Mask-based Workflows
 
 ```
-EdgeTAMImageSegmentor → MaskProcessor → ImageComposite
+LoadImage → InteractiveMaskEditor → EdgeTAMVideoTracker → EdgeTAMSelectedPersonBridge → ImageComposite
 ```
 
 ### DWPose Bridge
@@ -256,7 +256,7 @@ LoadVideo → EdgeTAMVideoTracker → EdgeTAMSelectedPersonBridge → DWPose
 ### Batch Processing
 
 ```
-ImageBatch → EdgeTAMImageSegmentor → MaskBatch → BatchProcessor
+ImageBatch → EdgeTAMVideoTracker → EdgeTAMSelectedPersonBridge → BatchProcessor
 ```
 
 ## 🎯 Visual Point Editor

@@ -3,10 +3,33 @@ EdgeTAM ComfyUI Nodes
 Main node implementations for EdgeTAM video tracking and image segmentation.
 """
 
+import os
+import sys
 import numpy as np
 import torch
 import cv2
 from PIL import Image
+
+
+def _prefer_local_edgetam_sam2():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    edge_tam_repo_path = os.path.join(current_dir, "EdgeTAM")
+
+    if os.path.isdir(edge_tam_repo_path):
+        resolved_repo = os.path.abspath(edge_tam_repo_path)
+        loaded = sys.modules.get("sam2")
+        loaded_file = os.path.abspath(getattr(loaded, "__file__", "") or "") if loaded else ""
+
+        if loaded and loaded_file and resolved_repo not in loaded_file:
+            print(f"EdgeTAM: removing preloaded sam2 from {loaded_file}")
+            for name in [key for key in list(sys.modules.keys()) if key == "sam2" or key.startswith("sam2.")]:
+                del sys.modules[name]
+
+        if resolved_repo not in sys.path:
+            sys.path.insert(0, resolved_repo)
+
+
+_prefer_local_edgetam_sam2()
 
 # Import EdgeTAM components
 try:
@@ -44,8 +67,9 @@ def get_image_predictor():
         try:
             model_path = get_model_path()
             device = get_device()
+            print(f"EdgeTAM image predictor config: configs/edgetam.yaml")
             sam2_model = build_sam2(
-                config_file="edgetam.yaml",
+                config_file="configs/edgetam.yaml",
                 ckpt_path=model_path,
                 device=device
             )
@@ -164,8 +188,14 @@ class EdgeTAMVideoTracker:
             if not model_path:
                 model_path = get_model_path()
 
-            # Use EdgeTAM config name (Hydra will find it in sam2 package)
-            config_name = "edgetam.yaml"
+            # Use the explicit EdgeTAM config path from the cloned repo.
+            config_name = "configs/edgetam.yaml"
+            try:
+                import sam2 as sam2_pkg
+                print(f"EdgeTAM sam2 module resolved from: {getattr(sam2_pkg, '__file__', '<unknown>')}")
+            except Exception:
+                pass
+            print(f"EdgeTAM video config: {config_name}")
 
             # Build video predictor
             self.predictor = build_sam2_video_predictor(

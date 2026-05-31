@@ -7,6 +7,22 @@ Verifies that EdgeTAM is properly installed and can be imported.
 import sys
 import os
 import traceback
+from pathlib import Path
+
+
+def _prefer_local_edgetam_sam2():
+    repo_path = Path(__file__).resolve().parent / "EdgeTAM"
+    if repo_path.exists():
+        repo_path_str = str(repo_path)
+        if repo_path_str not in sys.path:
+            sys.path.insert(0, repo_path_str)
+
+        loaded = sys.modules.get("sam2")
+        loaded_file = os.path.abspath(getattr(loaded, "__file__", "") or "") if loaded else ""
+        if loaded and loaded_file and repo_path_str not in loaded_file:
+            print(f"Removing preloaded sam2 from {loaded_file}")
+            for name in [key for key in list(sys.modules.keys()) if key == "sam2" or key.startswith("sam2.")]:
+                del sys.modules[name]
 
 def test_imports():
     """Test basic imports."""
@@ -47,13 +63,15 @@ def test_edgetam():
     print("\nTesting EdgeTAM...")
     
     try:
+        _prefer_local_edgetam_sam2()
         import sam2
         print("✓ SAM2 package found")
+        print(f"  sam2 resolved to: {getattr(sam2, '__file__', '<unknown>')}")
     except ImportError:
         print("✗ SAM2 package not found")
         print("  Please install EdgeTAM:")
         print("  git clone https://github.com/facebookresearch/EdgeTAM.git")
-        print("  cd EdgeTAM && pip install -e .")
+        print("  cd EdgeTAM && python -m pip install --break-system-packages -e .")
         return False
     
     try:
@@ -84,7 +102,7 @@ def test_node_imports():
         return False
     
     try:
-        from edgetam_nodes import EdgeTAMVideoTracker, EdgeTAMImageSegmentor
+        from edgetam_nodes import EdgeTAMVideoTracker, EdgeTAMSelectedPersonBridge, InteractiveMaskEditor
         print("✓ EdgeTAM nodes")
     except ImportError as e:
         print(f"✗ EdgeTAM nodes: {e}")
@@ -107,6 +125,8 @@ def test_model_download():
         else:
             print(f"✗ Model not found at: {model_path}")
             print("  Model will be downloaded on first use")
+        expected_space_model = Path(__file__).resolve().parent / "models" / "edgetam.pt"
+        print(f"  Expected model location: {expected_space_model}")
         
         return True
         
@@ -119,8 +139,7 @@ def test_config():
     print("\nTesting configuration...")
     
     try:
-        from edgetam_utils import get_config_path
-        config_path = get_config_path()
+        config_path = Path(__file__).resolve().parent / "EdgeTAM" / "sam2" / "configs" / "edgetam.yaml"
         
         if os.path.exists(config_path):
             print(f"✓ Config found at: {config_path}")
@@ -161,6 +180,8 @@ def main():
     """Run all tests."""
     print("EdgeTAM ComfyUI Node Test Suite")
     print("=" * 40)
+    print(f"Python interpreter: {sys.executable}")
+    print(f"Repo root: {Path(__file__).resolve().parent}")
     
     tests = [
         test_imports,

@@ -10,6 +10,7 @@ EdgeTAM is an optimized variant of SAM 2 designed for on-device execution, runni
 
 - **Interactive Video Object Tracking**: Pause the workflow at any time to draw a mask on the first frame of your video. The editor provides a live preview of the segmentation.
 - **Automated Workflow Support**: For batch processing, you can bypass the interactive editor by providing a JSON string with pre-defined mask points.
+- **Selected-Person Bridge**: Convert EdgeTAM masks into clean image batches for downstream image-only nodes like DWPose.
 - **High Performance**: Optimized for real-time inference on consumer hardware.
 - **Automatic Installation**: The required EdgeTAM library and model checkpoint are automatically installed on the first run.
 

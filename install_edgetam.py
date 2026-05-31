@@ -9,6 +9,9 @@ import sys
 import subprocess
 from pathlib import Path
 
+EDGE_TAM_REPO_URL = "https://github.com/facebookresearch/EdgeTAM.git"
+EDGE_TAM_CHECKPOINT_URL = "https://huggingface.co/spaces/facebook/EdgeTAM/resolve/main/checkpoints/edgetam.pt"
+
 def run_command(cmd, check=True):
     """Run a shell command and return the result."""
     print(f"Running: {cmd}")
@@ -60,11 +63,12 @@ def check_torch():
 def install_requirements():
     """Install required packages."""
     print("Installing requirements...")
+    print(f"Using Python interpreter: {sys.executable}")
     
     # Install from requirements.txt
     requirements_file = Path(__file__).parent / "requirements.txt"
     if requirements_file.exists():
-        run_command(f"pip install -r {requirements_file}")
+        run_command(f'"{sys.executable}" -m pip install --break-system-packages -r "{requirements_file}"')
     else:
         # Install manually if requirements.txt is missing
         packages = [
@@ -81,7 +85,7 @@ def install_requirements():
         ]
         
         for package in packages:
-            run_command(f"pip install {package}")
+            run_command(f'"{sys.executable}" -m pip install --break-system-packages {package}')
 
 def clone_edgetam():
     """Clone EdgeTAM repository into the custom node directory."""
@@ -89,20 +93,20 @@ def clone_edgetam():
     
     parent_dir = Path(__file__).parent
     edgetam_path = parent_dir / "EdgeTAM"
+    print(f"Target EdgeTAM path: {edgetam_path}")
     
     if edgetam_path.exists():
         print(f"EdgeTAM directory already exists at {edgetam_path}. Skipping clone.")
     else:
         # Clone repository
-        run_command(f"git clone https://github.com/facebookresearch/EdgeTAM.git {edgetam_path}")
+        run_command(f'git clone "{EDGE_TAM_REPO_URL}" "{edgetam_path}"')
     
     # Install EdgeTAM
     print("Installing EdgeTAM...")
     original_dir = os.getcwd()
     try:
-        # Change to the EdgeTAM directory to run installation
-        os.chdir(edgetam_path)
-        run_command("pip install -e .")
+        # Install into the same Python interpreter that ComfyUI is using.
+        run_command(f'"{sys.executable}" -m pip install --break-system-packages -e "{edgetam_path}"')
     finally:
         # Change back to the original directory
         os.chdir(original_dir)
@@ -123,7 +127,7 @@ def download_model():
     
     # Download model
     import urllib.request
-    model_url = "https://github.com/facebookresearch/EdgeTAM/releases/download/v1.0/edgetam.pt"
+    model_url = EDGE_TAM_CHECKPOINT_URL
     
     print(f"Downloading from {model_url}...")
     try:
@@ -132,19 +136,27 @@ def download_model():
     except Exception as e:
         print(f"Failed to download model: {e}")
         print("You can manually download the model from:")
-        print("https://github.com/facebookresearch/EdgeTAM/tree/main/checkpoints")
+        print("https://huggingface.co/spaces/facebook/EdgeTAM/blob/main/checkpoints/edgetam.pt")
 
 def test_installation():
     """Test if EdgeTAM is properly installed."""
     print("Testing EdgeTAM installation...")
     
     try:
+        edge_tam_path = Path(__file__).parent / "EdgeTAM"
+        if edge_tam_path.exists():
+            edge_tam_path_str = str(edge_tam_path.resolve())
+            if edge_tam_path_str not in sys.path:
+                sys.path.insert(0, edge_tam_path_str)
+
         import sam2
         from sam2.build_sam import build_sam2_video_predictor
+        sam2_file = getattr(sam2, "__file__", "<unknown>")
         print("EdgeTAM import successful!")
+        print(f"sam2 resolved to: {sam2_file}")
         
-        # Try to load model (without actually running inference)
-        config_path = Path(__file__).parent / "configs" / "edgetam.yaml"
+        # Try to load model assets without running inference
+        config_path = Path(__file__).parent / "EdgeTAM" / "sam2" / "configs" / "edgetam.yaml"
         model_path = Path(__file__).parent / "models" / "edgetam.pt"
         
         if config_path.exists() and model_path.exists():
@@ -165,6 +177,8 @@ def main():
     print("=" * 60)
     print("EdgeTAM ComfyUI Installation Script")
     print("=" * 60)
+    print(f"Python interpreter: {sys.executable}")
+    print(f"Checkpoint source: {EDGE_TAM_CHECKPOINT_URL}")
     
     # Check prerequisites
     check_python_version()

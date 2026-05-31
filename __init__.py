@@ -26,6 +26,27 @@ if os.path.isdir(edge_tam_repo_path):
     if edge_tam_repo_path not in sys.path:
         sys.path.insert(0, edge_tam_repo_path)
 
+
+def _prefer_local_edgetam_sam2():
+    """
+    Ensure the local cloned EdgeTAM repo wins import resolution over any other
+    sam2 package already present in the process.
+    """
+    if not os.path.isdir(edge_tam_repo_path):
+        return
+
+    resolved_repo = os.path.abspath(edge_tam_repo_path)
+    loaded = sys.modules.get("sam2")
+    loaded_file = os.path.abspath(getattr(loaded, "__file__", "") or "") if loaded else ""
+
+    if loaded and loaded_file and resolved_repo not in loaded_file:
+        print(f"EdgeTAM: removing preloaded sam2 from {loaded_file}")
+        for name in [key for key in list(sys.modules.keys()) if key == "sam2" or key.startswith("sam2.")]:
+            del sys.modules[name]
+
+    if resolved_repo not in sys.path:
+        sys.path.insert(0, resolved_repo)
+
 def install_edgetam():
     """Attempt to automatically install EdgeTAM."""
     print("=" * 60)
@@ -36,7 +57,7 @@ def install_edgetam():
     
     try:
         # Ensure the script is executable
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", os.path.join(current_dir, "requirements.txt")], check=True)
+        subprocess.run([sys.executable, "-m", "pip", "install", "--break-system-packages", "-r", os.path.join(current_dir, "requirements.txt")], check=True)
         
         # Run the installation script
         result = subprocess.run([sys.executable, install_script], check=True, capture_output=True, text=True)
@@ -62,6 +83,7 @@ def install_edgetam():
 
 # Check for EdgeTAM installation
 try:
+    _prefer_local_edgetam_sam2()
     import sam2
     EDGETAM_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
@@ -74,7 +96,7 @@ except (ImportError, ModuleNotFoundError):
         print("   git clone https://github.com/facebookresearch/EdgeTAM.git")
         print("2. Install EdgeTAM:")
         print("   cd EdgeTAM")
-        print("   pip install -e .")
+        print("   python -m pip install --break-system-packages -e .")
         print("3. Restart ComfyUI")
         print("=" * 60)
 
@@ -87,6 +109,10 @@ if EDGETAM_AVAILABLE:
         __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
         
         print("EdgeTAM ComfyUI nodes loaded successfully!")
+        if os.getenv("EDGETAM_DEBUG", "0") == "1":
+            print(f"EdgeTAM debug: current_dir={current_dir}")
+            print(f"EdgeTAM debug: edge_tam_repo_path={edge_tam_repo_path}")
+            print(f"EdgeTAM debug: sam2 module file={getattr(sam2, '__file__', '<unknown>')}")
         print("Available nodes:")
         for node_name in NODE_DISPLAY_NAME_MAPPINGS.values():
             print(f"  - {node_name}")
