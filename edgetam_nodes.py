@@ -470,17 +470,21 @@ class EdgeTAMSelectedPersonBridge:
         selected_masks = binary_mask.unsqueeze(-1)
         return (selected_frames, selected_masks)
     
-
-
-
 import asyncio
-import server
 import uuid
-from aiohttp import web
 import json
 import io
 import base64
 import threading
+
+try:
+    from aiohttp import web
+    import server  # ComfyUI runtime module
+    HAS_COMFY_SERVER = True
+except Exception:
+    web = None
+    server = None
+    HAS_COMFY_SERVER = False
 
 # A dictionary to hold threading events for each interactive session
 INTERACTIVE_SESSIONS = {}
@@ -536,6 +540,12 @@ class InteractiveMaskEditor:
         result_holder = {}  # Use a dict to hold the result
         INTERACTIVE_SESSIONS[session_id] = (event, result_holder)
 
+        if not HAS_COMFY_SERVER:
+            raise RuntimeError(
+                "InteractiveMaskEditor requires ComfyUI's server runtime. "
+                "Use optional_mask_data for automation or run inside ComfyUI."
+            )
+
         # Schedule the websocket send on the main asyncio loop
         main_loop = server.PromptServer.instance.loop
         asyncio.run_coroutine_threadsafe(
@@ -578,3 +588,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "EdgeTAMSelectedPersonBridge": "EdgeTAM Selected Person Bridge",
     "InteractiveMaskEditor": "Interactive Mask Editor",
 }
+
+if not HAS_COMFY_SERVER:
+    print(
+        "Could not import aiohttp/server. "
+        "InteractiveMaskEditor API routes will not be available outside ComfyUI."
+    )
